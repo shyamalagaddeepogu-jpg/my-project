@@ -26,14 +26,14 @@ def dashboard():
     return send_from_directory('.', 'dashboard.html')
 
 @app.route('/reset/<task_id>', methods=['POST'])
-def reset(task_id):
+def reset_task(task_id):
     env, err = get_env(task_id)
     if err: return jsonify({"error": err}), 404
     obs = env.reset()
     return jsonify(obs.dict())
 
 @app.route('/step/<task_id>', methods=['POST'])
-def step(task_id):
+def step_task(task_id):
     env, err = get_env(task_id)
     if err: return jsonify({"error": err}), 404
     data = request.get_json()
@@ -61,10 +61,25 @@ def list_tasks():
     })
 
 @app.route('/score/<task_id>', methods=['GET'])
-def score(task_id):
+def score_task(task_id):
     env, err = get_env(task_id)
     if err: return jsonify({"error": err}), 404
     return jsonify({"task_id": task_id, "score": env.final_score(), "stats": env._episode_stats()})
+
+
+# ---- HACKATHON REQUIRED GENERIC ENDPOINTS ----
+
+@app.route('/reset', methods=['POST'])
+def reset_default():
+    return reset_task("task_easy")
+
+@app.route('/step', methods=['POST'])
+def step_default():
+    return step_task("task_easy")
+
+@app.route('/score', methods=['GET'])
+def score_default():
+    return score_task("task_easy")
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=7860, debug=False)
