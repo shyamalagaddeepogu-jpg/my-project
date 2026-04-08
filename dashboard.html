@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DispatchAI — Control Room</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#080b0f; --bg2:#0d1117; --bg3:#141b22;
+  --border:rgba(255,255,255,0.07); --border2:rgba(255,255,255,0.13);
+  --accent:#00e5a0; --accent2:#2f9eff; --warn:#ff9500; --danger:#ff3b5c; --purple:#bf5af2;
+  --text:#e8eaed; --muted:#8b949e;
+  --mono:'JetBrains Mono',monospace; --display:'Syne',sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;overflow:hidden;}
+body{background:var(--bg);color:var(--text);font-family:var(--mono);font-size:13px;display:flex;flex-direction:column;}
+
+/* HEADER */
+header{display:flex;align-items:center;gap:16px;padding:12px 20px;border-bottom:1px solid var(--border);background:var(--bg2);flex-shrink:0;}
+.logo{font-family:var(--display);font-weight:800;font-size:22px;letter-spacing:-0.5px;color:var(--accent);}
+.logo span{color:var(--text);}
+.task-tabs{display:flex;gap:5px;margin-left:8px;}
+.task-tab{padding:7px 18px;border:1px solid var(--border2);background:transparent;color:var(--muted);cursor:pointer;font-family:var(--mono);font-size:12px;border-radius:5px;transition:all 0.15s;font-weight:700;letter-spacing:0.5px;}
+.task-tab.active{background:var(--accent);color:#000;border-color:var(--accent);}
+.task-tab:hover:not(.active){color:var(--text);}
+.header-right{display:flex;align-items:center;gap:14px;margin-left:auto;}
+.api-pill{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);background:var(--bg3);border:1px solid var(--border);padding:5px 12px;border-radius:20px;}
+#api-dot{width:7px;height:7px;border-radius:50%;background:var(--danger);transition:all 0.3s;}
+#api-dot.online{background:var(--accent);box-shadow:0 0 7px var(--accent);}
+.run-counter{font-size:12px;color:var(--muted);}
+.run-counter span{color:var(--accent);font-weight:700;}
+
+/* MAIN LAYOUT */
+.main{display:grid;grid-template-columns:1fr 320px;grid-template-rows:1fr 220px;gap:1px;flex:1;background:var(--border);min-height:0;}
+.panel{background:var(--bg);overflow:hidden;display:flex;flex-direction:column;min-height:0;}
+.ph{display:flex;align-items:center;justify-content:space-between;padding:9px 14px;border-bottom:1px solid var(--border);background:var(--bg2);flex-shrink:0;}
+.pt{font-family:var(--display);font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);}
+
+/* MAP */
+#map-panel{grid-row:1;grid-column:1;position:relative;}
+#map-canvas{display:block;width:100%;flex:1;min-height:0;}
+
+/* LEGEND */
+.legend{position:absolute;bottom:14px;left:14px;background:rgba(8,11,15,0.9);border:1px solid var(--border2);border-radius:8px;padding:12px 14px;font-size:11px;display:flex;flex-direction:column;gap:6px;backdrop-filter:blur(6px);}
+.legend-title{font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:2px;font-weight:700;}
+.lr{display:flex;align-items:center;gap:8px;color:var(--text);}
+.ldot{width:12px;height:12px;border-radius:50%;flex-shrink:0;}
+
+/* RIGHT PANEL */
+#right-panel{grid-row:1/3;grid-column:2;background:var(--border);display:flex;flex-direction:column;gap:1px;}
+
+/* METRICS */
+.metrics-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);}
+.metric{background:var(--bg);padding:14px 14px;}
+.mlabel{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:4px;}
+.mval{font-family:var(--display);font-size:26px;font-weight:800;line-height:1;}
+.mval.green{color:var(--accent);}
+.mval.blue{color:var(--accent2);}
+.mval.warn{color:var(--warn);}
+.mval.danger{color:var(--danger);}
+
+/* SCORE */
+.score-section{background:var(--bg);padding:14px;}
+.score-top{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px;}
+.score-label{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);}
+.score-num{font-family:var(--display);font-size:38px;font-weight:800;color:var(--accent);transition:color 0.3s;line-height:1;}
+.score-bar-wrap{height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;margin:8px 0 10px;}
+.score-bar{height:100%;border-radius:3px;transition:width 0.6s ease,background 0.3s;width:0%;background:var(--accent);}
+.hist-label{font-size:10px;color:var(--muted);margin-bottom:5px;}
+.score-history{display:flex;gap:4px;align-items:flex-end;height:32px;}
+.shbar{width:12px;border-radius:2px 2px 0 0;background:var(--bg3);transition:height 0.3s;flex-shrink:0;cursor:default;}
+
+/* TASK INFO */
+.task-info{background:var(--bg);padding:12px 14px;}
+.ti-title{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;font-weight:700;}
+.tbadge{display:inline-block;padding:3px 10px;border-radius:4px;font-size:11px;font-weight:700;letter-spacing:0.5px;margin-bottom:8px;}
+.badge-easy{background:rgba(0,229,160,0.15);color:var(--accent);}
+.badge-medium{background:rgba(255,149,0,0.15);color:var(--warn);}
+.badge-hard{background:rgba(255,59,92,0.15);color:var(--danger);}
+.trow{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:3px;}
+.trow span:last-child{color:var(--text);font-weight:600;}
+
+/* ORDERS */
+.orders-section{background:var(--bg);flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.ofilt{display:flex;gap:4px;padding:7px 8px;border-bottom:1px solid var(--border);}
+.fb{padding:3px 9px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-family:var(--mono);font-size:10px;border-radius:3px;transition:all 0.1s;font-weight:700;}
+.fb.active{background:var(--bg3);color:var(--text);border-color:var(--border2);}
+.order-list{flex:1;overflow-y:auto;padding:5px;scrollbar-width:thin;scrollbar-color:var(--border2) transparent;}
+.oi{display:flex;align-items:center;gap:7px;padding:7px 9px;border-radius:5px;margin-bottom:3px;border:1px solid transparent;transition:all 0.2s;cursor:default;}
+.oi:hover{background:var(--bg3)!important;}
+.oi.pending{border-color:var(--border);background:rgba(255,255,255,0.02);}
+.oi.in_transit{border-color:rgba(47,158,255,0.3);background:rgba(47,158,255,0.06);}
+.oi.delivered{border-color:rgba(0,229,160,0.25);background:rgba(0,229,160,0.05);}
+.oi.delayed{border-color:rgba(255,149,0,0.3);background:rgba(255,149,0,0.05);}
+.oi.cancelled{border-color:rgba(255,59,92,0.15);opacity:0.4;}
+.oid{font-size:11px;font-weight:700;color:var(--text);min-width:56px;}
+.opri{font-size:9px;padding:2px 5px;border-radius:2px;text-transform:uppercase;font-weight:700;}
+.ph-hi{background:rgba(255,59,92,0.18);color:#ff6b7a;}
+.ph-me{background:rgba(255,149,0,0.18);color:#ffaa40;}
+.ph-lo{background:rgba(107,114,128,0.2);color:var(--muted);}
+.owt{color:var(--muted);font-size:10px;margin-left:auto;}
+.odrv{font-size:9px;color:var(--accent2);}
+.osdot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+.sd-pending{background:var(--muted);}
+.sd-in_transit{background:var(--accent2);box-shadow:0 0 4px var(--accent2);}
+.sd-delivered{background:var(--accent);box-shadow:0 0 4px var(--accent);}
+.sd-delayed{background:var(--warn);}
+.sd-cancelled{background:var(--danger);}
+
+/* LOG */
+#log-panel{grid-row:2;grid-column:1;}
+.log-content{flex:1;overflow-y:auto;padding:8px 14px;scrollbar-width:thin;scrollbar-color:var(--border2) transparent;display:flex;flex-direction:column;gap:2px;}
+.le{font-size:11px;color:var(--muted);display:flex;gap:8px;padding:2px 0;animation:fi 0.2s ease;}
+@keyframes fi{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+.lt{color:var(--muted);flex-shrink:0;opacity:0.5;font-size:10px;}
+.ltag{font-size:9px;padding:1px 6px;border-radius:2px;font-weight:700;flex-shrink:0;letter-spacing:0.5px;}
+.tag-assign{background:rgba(47,158,255,0.15);color:var(--accent2);}
+.tag-deliver{background:rgba(0,229,160,0.15);color:var(--accent);}
+.tag-fail{background:rgba(255,59,92,0.15);color:var(--danger);}
+.tag-warn{background:rgba(255,149,0,0.15);color:var(--warn);}
+.tag-system{background:rgba(191,90,242,0.15);color:var(--purple);}
+.lm.success{color:var(--accent);}
+.lm.info{color:var(--accent2);}
+.lm.warn{color:var(--warn);}
+.lm.danger{color:var(--danger);}
+.lm.system{color:var(--purple);}
+.lm.normal{color:#9ca3af;}
+
+/* CONTROLS */
+.ctrl{display:flex;align-items:center;gap:10px;padding:9px 14px;border-top:1px solid var(--border);background:var(--bg2);flex-shrink:0;}
+.btn{padding:8px 18px;border-radius:5px;font-family:var(--mono);font-size:12px;font-weight:700;cursor:pointer;border:1px solid;transition:all 0.15s;letter-spacing:0.3px;}
+.btn-p{background:var(--accent);color:#000;border-color:var(--accent);box-shadow:0 0 12px rgba(0,229,160,0.25);}
+.btn-p:hover{box-shadow:0 0 22px rgba(0,229,160,0.45);transform:translateY(-1px);}
+.btn-p:disabled{opacity:0.35;cursor:not-allowed;transform:none;box-shadow:none;}
+.btn-g{background:transparent;color:var(--muted);border-color:var(--border2);}
+.btn-g:hover{color:var(--text);}
+.spd{display:flex;align-items:center;gap:7px;margin-left:6px;}
+.spd label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;}
+input[type=range]{accent-color:var(--accent);width:80px;}
+.stepind{margin-left:auto;font-size:11px;color:var(--muted);}
+.stepind span{color:var(--text);font-weight:700;}
+
+/* TOOLTIP */
+#tt{position:fixed;background:var(--bg2);border:1px solid var(--border2);border-radius:7px;padding:10px 12px;font-size:11px;pointer-events:none;z-index:1000;display:none;min-width:180px;line-height:1.8;}
+#tt .ttt{font-weight:700;color:var(--text);margin-bottom:4px;font-size:12px;}
+#tt .ttr{display:flex;justify-content:space-between;gap:14px;color:var(--muted);}
+#tt .ttr span:last-child{color:var(--text);}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Dispatch<span>AI</span></div>
+  <div class="task-tabs">
+    <button class="task-tab active" onclick="selectTask('task_easy')">EASY</button>
+    <button class="task-tab" onclick="selectTask('task_medium')">MEDIUM</button>
+    <button class="task-tab" onclick="selectTask('task_hard')">HARD</button>
+  </div>
+  <div class="header-right">
+    <div class="run-counter">Runs this session: <span id="run-count">0</span></div>
+    <div class="api-pill"><div id="api-dot"></div><span id="api-txt">connecting...</span></div>
+  </div>
+</header>
+
+<div class="main">
+
+  <div class="panel" id="map-panel">
+    <div class="ph"><span class="pt">Dispatch Map — 100×100 City Grid</span><span id="mapsub" style="font-size:11px;color:var(--muted);">Hover over orders/drivers for details</span></div>
+    <canvas id="map-canvas"></canvas>
+    <div class="legend">
+      <div class="legend-title">Legend</div>
+      <div class="lr"><div class="ldot" style="background:#00e5a0;box-shadow:0 0 5px #00e5a0;"></div>Driver — free</div>
+      <div class="lr"><div class="ldot" style="background:#2f9eff;box-shadow:0 0 5px #2f9eff;"></div>Driver — delivering</div>
+      <div class="lr"><div class="ldot" style="background:rgba(255,255,255,0.1);border:2px solid #6b7280;"></div>Order — pending</div>
+      <div class="lr"><div class="ldot" style="background:rgba(47,158,255,0.2);border:2px solid #2f9eff;"></div>Order — in transit</div>
+      <div class="lr"><div class="ldot" style="background:rgba(0,229,160,0.2);border:2px solid #00e5a0;"></div>Order — delivered ✓</div>
+      <div class="lr"><div class="ldot" style="background:rgba(255,59,92,0.2);border:2px solid #ff3b5c;"></div>Order — failed</div>
+      <div style="border-top:1px solid var(--border);padding-top:6px;margin-top:2px;font-size:10px;color:var(--muted);">Ring color = priority: <span style="color:#ff3b5c">HIGH</span> / <span style="color:#ff9500">MED</span> / <span style="color:#6b7280">LOW</span></div>
+    </div>
+  </div>
+
+  <div id="right-panel">
+    <div style="background:var(--bg);">
+      <div class="ph"><span class="pt">Live Metrics</span><span id="epstep" style="font-size:10px;color:var(--muted);">step 0</span></div>
+      <div class="metrics-grid">
+        <div class="metric"><div class="mlabel">Delivered</div><div class="mval green" id="m-del">0</div></div>
+        <div class="metric"><div class="mlabel">Failed</div><div class="mval danger" id="m-fail">0</div></div>
+        <div class="metric"><div class="mlabel">Pending</div><div class="mval blue" id="m-pend">0</div></div>
+        <div class="metric"><div class="mlabel">Sim Time</div><div class="mval warn" id="m-time">0m</div></div>
+      </div>
+    </div>
+
+    <div class="score-section">
+      <div class="score-top">
+        <span class="score-label">Episode Score</span>
+        <span id="sgrade" style="font-size:11px;color:var(--muted);font-weight:700;"></span>
+      </div>
+      <div class="score-num" id="snum">0.00</div>
+      <div class="score-bar-wrap"><div class="score-bar" id="sbar"></div></div>
+      <div class="hist-label">Score history (last 8 runs)</div>
+      <div class="score-history" id="shist"></div>
+    </div>
+
+    <div class="task-info">
+      <div class="ti-title">Current Task</div>
+      <div id="tbadge" class="tbadge badge-easy">EASY</div>
+      <div class="trow"><span>Orders</span><span id="ti-o">3</span></div>
+      <div class="trow"><span>Drivers</span><span id="ti-d">3</span></div>
+      <div class="trow"><span>Time pressure</span><span id="ti-p">relaxed</span></div>
+      <div class="trow"><span>Cancellations</span><span id="ti-c">no</span></div>
+    </div>
+
+    <div class="orders-section">
+      <div class="ph"><span class="pt">Orders</span><span id="ocnt" style="font-size:10px;color:var(--muted);"></span></div>
+      <div class="ofilt">
+        <button class="fb active" onclick="setFilter('all',this)">ALL</button>
+        <button class="fb" onclick="setFilter('pending',this)">PENDING</button>
+        <button class="fb" onclick="setFilter('delivered',this)">DONE</button>
+        <button class="fb" onclick="setFilter('cancelled',this)">FAILED</button>
+      </div>
+      <div class="order-list" id="olist"></div>
+    </div>
+  </div>
+
+  <div class="panel" id="log-panel">
+    <div class="ph"><span class="pt">Dispatch Log</span><span style="font-size:11px;color:var(--muted);">Real-time agent decisions</span></div>
+    <div class="log-content" id="logc"></div>
+    <div class="ctrl">
+      <button class="btn btn-p" id="btn-run" onclick="runEpisode()">▶ RUN EPISODE</button>
+      <button class="btn btn-g" onclick="resetEnv()">RESET</button>
+      <div class="spd">
+        <label>Speed</label>
+        <input type="range" id="spd" min="100" max="2000" value="900" step="100" oninput="document.getElementById('spdlbl').textContent=(this.value/1000).toFixed(1)+'s'">
+        <span id="spdlbl" style="font-size:10px;color:var(--muted);min-width:28px;">0.9s</span>
+      </div>
+      <div class="stepind">Step <span id="cstep">0</span> / <span id="mxstep">—</span></div>
+    </div>
+  </div>
+
+</div>
+<div id="tt"></div>
+
+<script>
+const API = window.location.origin;
+let currentTask = 'task_easy';
+let running = false;
+let orders = {}, drivers = {};
+let runHistory = {}, filter = 'all', stepCount = 0;
+let totalRuns = 0;
+
+// animated driver positions (separate from server state)
+let driverAnim = {}; // {id: {x,y, targetX, targetY, progress, animating}}
+let animRAF = null;
+let lastFrameTime = 0;
+
+const TASK_META = {
+  task_easy:   {label:'EASY',   badge:'badge-easy',   o:3,  d:3, p:'relaxed', ms:15, c:'no'},
+  task_medium: {label:'MEDIUM', badge:'badge-medium',  o:10, d:5, p:'normal',  ms:30, c:'no'},
+  task_hard:   {label:'HARD',   badge:'badge-hard',    o:20, d:7, p:'tight',   ms:60, c:'yes'},
+};
+
+// ── Canvas ────────────────────────────────────────────────
+const canvas = document.getElementById('map-canvas');
+const ctx = canvas.getContext('2d');
+
+function resizeCanvas() {
+  const p = document.getElementById('map-panel');
+  canvas.width = p.clientWidth;
+  canvas.height = p.clientHeight - 40;
+}
+window.addEventListener('resize', () => { resizeCanvas(); drawMap(); });
+resizeCanvas();
+
+function toC(x,y) {
+  const pad = 52;
+  return {
+    cx: pad + (x/100)*(canvas.width-pad*2),
+    cy: pad + (y/100)*(canvas.height-pad*2)
+  };
+}
+
+const SCOL = {pending:'#6b7280',in_transit:'#2f9eff',delivered:'#00e5a0',delayed:'#ff9500',cancelled:'#ff3b5c',assigned:'#2f9eff'};
+const PCOL = {high:'#ff3b5c',medium:'#ff9500',low:'#4b5563'};
+
+function drawMap() {
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0,0,W,H);
+
+  // grid
+  ctx.strokeStyle='rgba(255,255,255,0.03)';ctx.lineWidth=0.5;
+  for(let i=0;i<=10;i++){
+    const x=52+(i/10)*(W-104), y=52+(i/10)*(H-104);
+    ctx.beginPath();ctx.moveTo(x,52);ctx.lineTo(x,H-52);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(52,y);ctx.lineTo(W-52,y);ctx.stroke();
+  }
+  // axis labels
+  ctx.fillStyle='rgba(107,114,128,0.45)';ctx.font='9px JetBrains Mono';
+  for(let i=0;i<=5;i++){
+    const v=i*20;
+    ctx.textAlign='center';
+    ctx.fillText(v, 52+(v/100)*(W-104), H-38);
+    ctx.textAlign='right';
+    ctx.fillText(v, 44, 52+(v/100)*(H-104)+3);
+  }
+
+  // route lines for animating drivers
+  Object.values(driverAnim).forEach(da=>{
+    if(!da.animating) return;
+    const from = toC(da.startX, da.startY);
+    const to   = toC(da.targetX, da.targetY);
+    ctx.beginPath();
+    ctx.strokeStyle='rgba(47,158,255,0.2)';
+    ctx.lineWidth=1.5;
+    ctx.setLineDash([6,5]);
+    ctx.moveTo(from.cx,from.cy);ctx.lineTo(to.cx,to.cy);
+    ctx.stroke();ctx.setLineDash([]);
+  });
+
+  // orders
+  Object.values(orders).forEach(o=>{
+    const p=toC(o.dropoff.x,o.dropoff.y);
+    const col=SCOL[o.status]||'#6b7280';
+    const ring=PCOL[o.priority]||'#6b7280';
+
+    if(o.status==='pending'){
+      ctx.beginPath();ctx.arc(p.cx,p.cy,15,0,Math.PI*2);
+      ctx.strokeStyle=ring+'45';ctx.lineWidth=1.5;ctx.stroke();
+    }
+    ctx.beginPath();ctx.arc(p.cx,p.cy,8,0,Math.PI*2);
+    ctx.fillStyle=col+'22';ctx.fill();
+    ctx.strokeStyle=col;ctx.lineWidth=2;ctx.stroke();
+
+    if(o.status==='delivered'){
+      ctx.fillStyle=col;ctx.font='bold 9px sans-serif';ctx.textAlign='center';
+      ctx.fillText('✓',p.cx,p.cy+3);
+    }
+
+    const label=o.order_id.replace('ORD-','#');
+    ctx.fillStyle='rgba(8,11,15,0.8)';ctx.fillRect(p.cx-18,p.cy+10,36,14);
+    ctx.fillStyle=col;ctx.font='600 9px JetBrains Mono';ctx.textAlign='center';
+    ctx.fillText(label,p.cx,p.cy+21);
+  });
+
+  // animated drivers
+  Object.entries(driverAnim).forEach(([id,da])=>{
+    const p = toC(da.x, da.y);
+    const busy = da.animating;
+    const dCol = busy?'#2f9eff':'#00e5a0';
+    const load = drivers[id] ? drivers[id].current_load/drivers[id].capacity : 0;
+
+    // glow
+    const grd=ctx.createRadialGradient(p.cx,p.cy,2,p.cx,p.cy,22);
+    grd.addColorStop(0,busy?'rgba(47,158,255,0.3)':'rgba(0,229,160,0.25)');
+    grd.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.beginPath();ctx.arc(p.cx,p.cy,22,0,Math.PI*2);
+    ctx.fillStyle=grd;ctx.fill();
+
+    // body
+    ctx.beginPath();ctx.arc(p.cx,p.cy,9,0,Math.PI*2);
+    ctx.fillStyle=dCol;ctx.fill();
+
+    // load ring
+    if(load>0){
+      ctx.beginPath();
+      ctx.arc(p.cx,p.cy,14,-Math.PI/2,-Math.PI/2+load*Math.PI*2);
+      ctx.strokeStyle='#ff9500';ctx.lineWidth=2.5;ctx.stroke();
+    }
+
+    // label
+    ctx.fillStyle='#000';ctx.font='700 8px JetBrains Mono';ctx.textAlign='center';
+    ctx.fillText(id.replace('DRV-','D'),p.cx,p.cy+3);
+    ctx.fillStyle='rgba(8,11,15,0.8)';ctx.fillRect(p.cx-20,p.cy+12,40,13);
+    ctx.fillStyle=dCol;ctx.font='600 9px JetBrains Mono';ctx.textAlign='center';
+    ctx.fillText(id,p.cx,p.cy+23);
+  });
+}
+
+// ── Driver animation loop ─────────────────────────────────
+function animLoop(ts) {
+  if (!lastFrameTime) lastFrameTime = ts;
+  const dt = (ts - lastFrameTime) / 1000; // seconds
+  lastFrameTime = ts;
+
+  let anyMoving = false;
+  const speed = 18; // units/sec on the 100x100 grid
+
+  Object.entries(driverAnim).forEach(([id,da])=>{
+    if(!da.animating) return;
+    anyMoving = true;
+    const dx = da.targetX - da.x;
+    const dy = da.targetY - da.y;
+    const dist = Math.sqrt(dx*dx+dy*dy);
+    if(dist < 0.5){
+      da.x = da.targetX;
+      da.y = da.targetY;
+      da.animating = false;
+      return;
+    }
+    const step = Math.min(speed * dt, dist);
+    da.x += (dx/dist)*step;
+    da.y += (dy/dist)*step;
+  });
+
+  drawMap();
+  if(anyMoving || running) {
+    animRAF = requestAnimationFrame(animLoop);
+  } else {
+    animRAF = null;
+    lastFrameTime = 0;
+  }
+}
+
+function startAnim() {
+  if(!animRAF) {
+    lastFrameTime = 0;
+    animRAF = requestAnimationFrame(animLoop);
+  }
+}
+
+function moveDriver(driverId, fromX, fromY, toX, toY) {
+  if(!driverAnim[driverId]){
+    driverAnim[driverId] = {x:fromX, y:fromY, targetX:toX, targetY:toY, startX:fromX, startY:fromY, animating:true};
+  } else {
+    const da = driverAnim[driverId];
+    da.startX = da.x; da.startY = da.y;
+    da.targetX = toX; da.targetY = toY;
+    da.animating = true;
+  }
+  startAnim();
+}
+
+function initDriverPositions() {
+  Object.values(drivers).forEach(d=>{
+    if(!driverAnim[d.driver_id]){
+      driverAnim[d.driver_id] = {
+        x:d.location.x, y:d.location.y,
+        targetX:d.location.x, targetY:d.location.y,
+        startX:d.location.x, startY:d.location.y,
+        animating:false
+      };
+    }
+  });
+  startAnim();
+}
+
+// ── Tooltip ───────────────────────────────────────────────
+canvas.addEventListener('mousemove', e=>{
+  const rect=canvas.getBoundingClientRect();
+  const mx=e.clientX-rect.left, my=e.clientY-rect.top;
+  const tt=document.getElementById('tt');
+  let found=false;
+
+  for(const o of Object.values(orders)){
+    const p=toC(o.dropoff.x,o.dropoff.y);
+    if(Math.hypot(mx-p.cx,my-p.cy)<14){
+      tt.innerHTML=`<div class="ttt">${o.order_id}</div>
+        <div class="ttr"><span>Priority</span><span>${o.priority.toUpperCase()}</span></div>
+        <div class="ttr"><span>Weight</span><span>${o.weight}kg</span></div>
+        <div class="ttr"><span>Time window</span><span>${o.time_window}min</span></div>
+        <div class="ttr"><span>Status</span><span>${o.status}</span></div>
+        <div class="ttr"><span>Dropoff</span><span>(${o.dropoff.x}, ${o.dropoff.y})</span></div>
+        ${o.assigned_driver?`<div class="ttr"><span>Driver</span><span>${o.assigned_driver}</span></div>`:''}`;
+      tt.style.display='block';tt.style.left=(e.clientX+16)+'px';tt.style.top=(e.clientY-10)+'px';
+      found=true;break;
+    }
+  }
+  if(!found){
+    for(const [id,da] of Object.entries(driverAnim)){
+      const p=toC(da.x,da.y);
+      if(Math.hypot(mx-p.cx,my-p.cy)<16){
+        const d=drivers[id];
+        if(!d){continue;}
+        const loadPct=Math.round(d.current_load/d.capacity*100);
+        tt.innerHTML=`<div class="ttt">${id}</div>
+          <div class="ttr"><span>Status</span><span>${da.animating?'delivering':'available'}</span></div>
+          <div class="ttr"><span>Capacity</span><span>${d.capacity}kg</span></div>
+          <div class="ttr"><span>Current load</span><span>${d.current_load}kg (${loadPct}%)</span></div>
+          <div class="ttr"><span>Position</span><span>(${da.x.toFixed(1)}, ${da.y.toFixed(1)})</span></div>`;
+        tt.style.display='block';tt.style.left=(e.clientX+16)+'px';tt.style.top=(e.clientY-10)+'px';
+        found=true;break;
+      }
+    }
+  }
+  if(!found) tt.style.display='none';
+});
+canvas.addEventListener('mouseleave',()=>document.getElementById('tt').style.display='none');
+
+// ── UI ────────────────────────────────────────────────────
+function updateMetrics(obs){
+  document.getElementById('m-del').textContent=obs.delivered_count;
+  document.getElementById('m-fail').textContent=obs.failed_count;
+  document.getElementById('m-pend').textContent=obs.pending_orders.length;
+  document.getElementById('m-time').textContent=obs.current_time+'m';
+  document.getElementById('epstep').textContent='step '+stepCount;
+}
+
+function updateOrderList(){
+  const all=Object.values(orders);
+  const show=filter==='all'?all:filter==='delivered'?all.filter(o=>o.status==='delivered'||o.status==='delayed'):filter==='cancelled'?all.filter(o=>o.status==='cancelled'):all.filter(o=>o.status===filter);
+  document.getElementById('ocnt').textContent=all.length+' total';
+  const list=document.getElementById('olist');list.innerHTML='';
+  show.forEach(o=>{
+    const d=document.createElement('div');
+    d.className='oi '+(o.status==='in_transit'?'in_transit':o.status);
+    const pcls={high:'ph-hi',medium:'ph-me',low:'ph-lo'}[o.priority]||'ph-lo';
+    d.innerHTML=`<span class="oid">${o.order_id}</span>
+      <span class="opri ${pcls}">${o.priority}</span>
+      <span class="owt">${o.weight}kg</span>
+      ${o.assigned_driver?`<span class="odrv">${o.assigned_driver}</span>`:''}
+      <div class="osdot sd-${o.status==='in_transit'?'in_transit':o.status}"></div>`;
+    list.appendChild(d);
+  });
+}
+
+function setFilter(f,btn){filter=f;document.querySelectorAll('.fb').forEach(b=>b.classList.remove('active'));btn.classList.add('active');updateOrderList();}
+
+function updateScore(s){
+  document.getElementById('snum').textContent=s.toFixed(2);
+  document.getElementById('sbar').style.width=(s*100)+'%';
+  const [c,l]=s>=0.8?['var(--accent)','EXCELLENT']:s>=0.6?['var(--accent)','GOOD']:s>=0.35?['var(--warn)','AVERAGE']:['var(--danger)','POOR'];
+  document.getElementById('sbar').style.background=c;
+  document.getElementById('snum').style.color=c;
+  document.getElementById('sgrade').textContent=l;
+  document.getElementById('sgrade').style.color=c;
+}
+
+function addHistory(s){
+  if(!runHistory[currentTask]) runHistory[currentTask]=[];
+  runHistory[currentTask].push(s);
+  if(runHistory[currentTask].length>8) runHistory[currentTask].shift();
+  renderHistory();
+}
+
+function renderHistory(){
+  const hist=runHistory[currentTask]||[];
+  const c=document.getElementById('shist');c.innerHTML='';
+  for(let i=0;i<8;i++){
+    const b=document.createElement('div');b.className='shbar';
+    if(hist[i]!==undefined){
+      b.style.height=Math.round(hist[i]*32)+'px';
+      b.style.background=hist[i]>=0.7?'var(--accent)':hist[i]>=0.4?'var(--warn)':'var(--danger)';
+      b.title='Run '+(i+1)+': '+hist[i].toFixed(2);
+    } else {b.style.height='3px';}
+    c.appendChild(b);
+  }
+}
+
+function updateTaskInfo(t){
+  const m=TASK_META[t];
+  const b=document.getElementById('tbadge');
+  b.textContent=m.label;b.className='tbadge '+m.badge;
+  document.getElementById('ti-o').textContent=m.o;
+  document.getElementById('ti-d').textContent=m.d;
+  document.getElementById('ti-p').textContent=m.p;
+  document.getElementById('ti-c').textContent=m.c;
+  document.getElementById('mxstep').textContent=m.ms;
+  renderHistory();
+}
+
+function log(msg,tag='system',type='normal'){
+  const ts=new Date().toTimeString().slice(0,8);
+  const el=document.createElement('div');el.className='le';
+  el.innerHTML=`<span class="lt">${ts}</span><span class="ltag tag-${tag}">${tag.toUpperCase()}</span><span class="lm ${type}">${msg}</span>`;
+  const lc=document.getElementById('logc');lc.appendChild(el);lc.scrollTop=lc.scrollHeight;
+}
+
+// ── API ───────────────────────────────────────────────────
+async function api(method,path,body=null){
+  const opts={method,headers:{'Content-Type':'application/json'}};
+  if(body) opts.body=JSON.stringify(body);
+  const r=await fetch(API+path,opts);
+  if(!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+async function checkConnection(){
+  try{
+    await api('GET','/');
+    document.getElementById('api-dot').classList.add('online');
+    document.getElementById('api-txt').textContent='API online';
+    log('Connected to server at '+API,'system','system');
+    log('Select a task and click RUN EPISODE','system','normal');
+  }catch(e){
+  console.warn("Initial server check failed, retrying...");
+}
+}
+
+function applyObs(obs){
+  obs.pending_orders.forEach(o=>{orders[o.order_id]=o;});
+  obs.available_drivers.forEach(d=>{drivers[d.driver_id]=d;});
+  updateMetrics(obs);updateOrderList();
+}
+
+function selectTask(t){
+  currentTask=t;
+  document.querySelectorAll('.task-tab').forEach((b,i)=>b.classList.toggle('active',['task_easy','task_medium','task_hard'][i]===t));
+  updateTaskInfo(t);
+  orders={};drivers={};driverAnim={};
+  updateOrderList();updateScore(0);
+  document.getElementById('cstep').textContent='0';
+  log('Switched to '+t,'system','system');
+}
+
+async function resetEnv(){
+  if(running) return;
+  try{
+    const obs=await api('POST','/reset/'+currentTask);
+    orders={};drivers={};driverAnim={};
+    applyObs(obs);
+    initDriverPositions();
+    updateScore(0);stepCount=0;
+    document.getElementById('cstep').textContent='0';
+    log('Reset — '+obs.total_orders+' orders, '+obs.available_drivers.length+' drivers','system','system');
+    drawMap();
+  }catch(e){log('Reset failed: '+e.message,'fail','danger');}
+}
+
+// ── Agent ─────────────────────────────────────────────────
+function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y);}
+function pickAction(obs){
+  const pending=[...obs.pending_orders].sort((a,b)=>{
+    const ps={high:0,medium:1,low:2};
+    return(ps[a.priority]-ps[b.priority])||(a.time_window-b.time_window);
+  });
+  if(!pending.length) return null;
+  const avail=obs.available_drivers.filter(d=>d.available);
+  if(!avail.length) return null;
+  // for each pending order, find closest available driver with capacity
+  for(const o of pending){
+    const capable=avail.filter(d=>d.current_load+o.weight<=d.capacity);
+    if(!capable.length) continue;
+    // pick closest driver to the order's pickup location
+    const best=capable.reduce((a,b)=>
+      dist(a.location,o.pickup)<dist(b.location,o.pickup)?a:b
+    );
+    return{action_type:'assign',driver_id:best.driver_id,order_id:o.order_id};
+  }
+  return{action_type:'delay',order_id:pending[0].order_id};
+}
+
+// ── Run Episode ───────────────────────────────────────────
+async function runEpisode(){
+  if(running) return;
+  running=true;stepCount=0;
+  document.getElementById('btn-run').disabled=true;
+  totalRuns++;
+  document.getElementById('run-count').textContent=totalRuns;
+
+  try{
+    const obs=await api('POST','/reset/'+currentTask);
+    orders={};drivers={};driverAnim={};
+    applyObs(obs);
+    initDriverPositions();
+    updateScore(0);
+
+    const runNum=(runHistory[currentTask]||[]).length+1;
+    log('═══ Run #'+runNum+' started — '+currentTask+' ═══','system','system');
+    log(obs.total_orders+' orders loaded, '+obs.available_drivers.length+' drivers ready','system','normal');
+
+    let curObs=obs,done=false;
+
+    while(!done){
+      const action=pickAction(curObs);
+      if(!action) break;
+
+      const delay=2000-document.getElementById('spd').value;
+      await sleep(delay);
+
+      // snapshot driver position before step
+      const driverBefore = action.driver_id ? {...(drivers[action.driver_id]||{})} : null;
+
+      const result=await api('POST','/step/'+currentTask,action);
+      done=result.done;
+      stepCount++;
+      document.getElementById('cstep').textContent=stepCount;
+
+      // sync driver positions and animate
+      result.observation.available_drivers.forEach(d=>{
+        const old=drivers[d.driver_id];
+        drivers[d.driver_id]=d;
+        if(action.action_type==='assign' && d.driver_id===action.driver_id){
+          // find target order dropoff
+          const targetOrder=orders[action.order_id];
+          if(targetOrder){
+            const fromX=driverAnim[d.driver_id]?.x ?? d.location.x;
+            const fromY=driverAnim[d.driver_id]?.y ?? d.location.y;
+            moveDriver(d.driver_id, fromX, fromY, targetOrder.dropoff.x, targetOrder.dropoff.y);
+          }
+        }
+      });
+
+      // update order statuses
+      result.observation.pending_orders.forEach(o=>{orders[o.order_id]=o;});
+      const prevDel=parseInt(document.getElementById('m-del').textContent)||0;
+      Object.keys(orders).forEach(id=>{
+        const still=result.observation.pending_orders.find(o=>o.order_id===id);
+        if(!still&&(orders[id].status==='pending'||orders[id].status==='in_transit')){
+          orders[id].status=result.observation.delivered_count>prevDel?'delivered':'cancelled';
+        }
+      });
+
+      curObs=result.observation;
+      applyObs(result.observation);
+      const sd=await api('GET','/score/'+currentTask);
+      updateScore(sd.score);
+
+      // log
+      const rv=result.reward;
+      if(action.action_type==='assign'){
+        const good=rv.value>=0.7;
+        log(`${action.driver_id} → ${action.order_id} | reward: ${rv.value.toFixed(2)} | ${rv.reason}`,
+          good?'deliver':'warn', good?'success':'warn');
+      } else {
+        log(`${action.action_type.toUpperCase()} ${action.order_id} | ${rv.reason}`,'warn','warn');
+      }
+    }
+
+    const sd=await api('GET','/score/'+currentTask);
+    updateScore(sd.score);
+    addHistory(sd.score);
+
+    const s=sd.score;
+    const grade=s>=0.8?'EXCELLENT':s>=0.6?'GOOD':s>=0.35?'AVERAGE':'POOR';
+    const type=s>=0.6?'success':s>=0.35?'warn':'danger';
+    log('═══ Episode complete ═══','system','system');
+    log(`Final score: ${s.toFixed(4)} — ${grade}`,'deliver',type);
+    log(`Delivered ${sd.stats.delivered}/${sd.stats.total_orders} | On-time: ${(sd.stats.on_time_rate*100).toFixed(0)}%`,'system','normal');
+    log('Click RUN EPISODE again to run another episode','system','normal');
+
+  }catch(e){
+    log('Error: '+e.message,'fail','danger');
+  }
+  running=false;
+  document.getElementById('btn-run').disabled=false;
+}
+
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+
+// ── Init ──────────────────────────────────────────────────
+updateTaskInfo('task_easy');
+renderHistory();
+checkConnection();
+drawMap();
+</script>
+</body>
+</html>

@@ -1,0 +1,66 @@
+name: delivery-dispatcher
+version: "1.0.0"
+description: >
+  A real-world delivery dispatch simulation where an AI agent acts as a logistics
+  dispatcher, assigning drivers to orders, managing capacity, navigating traffic,
+  and optimising for on-time deliveries across 3 difficulty levels.
+
+author: openenv-submission
+tags:
+  - openenv
+  - logistics
+  - dispatch
+  - scheduling
+  - real-world
+
+tasks:
+  - id: task_easy
+    difficulty: easy
+    description: "3 orders, 3 drivers, relaxed time windows, no traffic or fatigue"
+  - id: task_medium
+    difficulty: medium
+    description: "10 orders, 5 drivers, capacity constraints, rush-hour traffic, SLA tracking"
+  - id: task_hard
+    difficulty: hard
+    description: "20 orders, 7 drivers, driver fatigue, dynamic cancellations, traffic bands, tight SLAs"
+
+observation_space:
+  type: object
+  fields:
+    pending_orders: "List of orders with location, weight, priority, time_window"
+    available_drivers: "List of drivers with location, capacity, effective_capacity (post-fatigue), current load"
+    current_time: "Simulation time in minutes"
+    delivered_count: "Orders delivered so far"
+    failed_count: "Orders that expired or were cancelled"
+
+action_space:
+  type: object
+  fields:
+    action_type: "assign | delay | cancel"
+    driver_id: "Target driver (required for assign)"
+    order_id: "Target order"
+
+reward:
+  range: [0.0, 1.0]
+  type: shaped
+  notes: >
+    Per-step: on-time high-priority delivery +1.0, normal/low +0.8, late +0.3,
+    capacity violation +0.05 (with -0.1 partial), SLA breach -0.1 partial, delay +0.1.
+    Episode score: weighted combination of delivery ratio, on-time rate, early-delivery
+    bonus (+0.15), driver utilisation bonus (+0.10), priority adherence bonus (+0.10),
+    step efficiency bonus (+0.05), minus violation and SLA breach penalties.
+
+endpoints:
+  reset: POST /reset/{task_id}
+  step:  POST /step/{task_id}
+  state: GET  /state/{task_id}
+  score: GET  /score/{task_id}
+  tasks: GET  /tasks
+
+inference:
+  script: inference.py
+  env_vars:
+    - API_BASE_URL
+    - MODEL_NAME
+    - HF_TOKEN
+    - ENV_URL
