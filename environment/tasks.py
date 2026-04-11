@@ -66,12 +66,12 @@ TASKS: Dict[str, TaskConfig] = {
         num_orders=20,
         num_drivers=7,
         time_pressure="tight",
-        max_steps=40,        # tightened from 60 — 20 orders, agent finishes ~22 steps
+        max_steps=40,
         seed=13,
         dynamic_cancellations=True,
         priority_sla=True,
         driver_fatigue=True,
-        # two traffic bands: rush (0–25 min, 1.8x), off-peak (50+ min, 0.85x)
+        # two traffic bands: rush (0-25 min, 1.8x), off-peak (50+ min, 0.85x)
         traffic_schedule=[(0, 25, 1.8), (50, 9999, 0.85)],
     ),
 }
@@ -87,14 +87,16 @@ def get_traffic_multiplier(config: TaskConfig, current_time: int) -> float:
     return 1.0
 
 
+# ── Score clamp — STRICTLY between 0 and 1, never 0.0 or 1.0 ─────────────────
+
+def _clamp(score: float) -> float:
+    """Clamp score to strictly open interval (0.001, 0.999)."""
+    return round(max(0.001, min(0.999, score)), 4)
+
+
 # ── Bonus helpers ─────────────────────────────────────────────────────────────
 
 def _early_delivery_bonus(episode_stats: Dict[str, Any]) -> float:
-    """
-    Reward delivering early relative to the order's time window.
-    Uses per-order (margin / window) ratios averaged across on-time deliveries.
-    Returns up to +0.15.
-    """
     ratios = episode_stats.get("time_margin_ratios", [])
     if not ratios:
         return 0.0
@@ -103,11 +105,6 @@ def _early_delivery_bonus(episode_stats: Dict[str, Any]) -> float:
 
 
 def _driver_utilisation_bonus(episode_stats: Dict[str, Any]) -> float:
-    """
-    Reward spreading deliveries evenly across the fleet.
-    Low variance in per-driver delivery counts → higher bonus.
-    Returns up to +0.10.
-    """
     driver_usage = episode_stats.get("driver_usage", {})
     if not driver_usage or len(driver_usage) < 2:
         return 0.0
@@ -121,11 +118,7 @@ def _driver_utilisation_bonus(episode_stats: Dict[str, Any]) -> float:
 
 
 def _priority_adherence_bonus(episode_stats: Dict[str, Any]) -> float:
-    """
-    Reward on-time delivery of HIGH priority orders.
-    Returns up to +0.10.
-    """
-    high_total   = episode_stats.get("high_priority_total", 0)
+    high_total = episode_stats.get("high_priority_total", 0)
     high_on_time = episode_stats.get("high_priority_on_time", 0)
     if high_total == 0:
         return 0.0
@@ -133,10 +126,6 @@ def _priority_adherence_bonus(episode_stats: Dict[str, Any]) -> float:
 
 
 def _step_efficiency_bonus(episode_stats: Dict[str, Any], max_steps: int) -> float:
-    """
-    Reward finishing in fewer steps.
-    Returns up to +0.05.
-    """
     steps_used = episode_stats.get("steps_used", max_steps)
     if max_steps <= 0:
         return 0.0
@@ -148,76 +137,63 @@ def _step_efficiency_bonus(episode_stats: Dict[str, Any], max_steps: int) -> flo
 
 def grade_episode(task_id: str, episode_stats: Dict[str, Any]) -> float:
     """
-    Multi-factor episode score (0.0 – 1.0).
-
-    Core signals:
-      delivery_ratio   — fraction of orders delivered
-      on_time_rate     — fraction delivered within time window
-    Bonuses:
-      early_bonus      — +0.15 max: reward for early deliveries
-      utilisation_bonus— +0.10 max: reward for spreading load across fleet
-      priority_bonus   — +0.10 max: reward for handling HIGH orders first
-      efficiency_bonus — +0.05 max: reward for finishing in fewer steps
-    Penalties:
-      capacity_violations  — per violation
-      sla_breaches         — per missed high-priority SLA
-      cancelled_penalty    — chasing orders that were cancelled (hard only)
+    Multi-factor episode score strictly between 0 and 1 (never 0.0 or 1.0).
     """
-    config        = TASKS[task_id]
-    delivered     = episode_stats.get("delivered", 0)
-    total         = episode_stats.get("total_orders", config.num_orders)
-    on_time_rate  = episode_stats.get("on_time_rate", 0.0)
-    cap_violations= episode_stats.get("capacity_violations", 0)
-    sla_breaches  = episode_stats.get("priority_sla_breaches", 0)
+    config = TASKS[task_id]
+    delivered = episode_stats.get("delivered", 0)
+    total = episode_stats.get("total_orders", config.num_orders)
+    on_time_rate = episode_stats.get("on_time_rate", 0.0)
+    cap_violations = episode_stats.get("capacity_violations", 0)
+    sla_breaches = episode_stats.get("priority_sla_breaches", 0)
 
     if total == 0:
-        return 0.0
+        return 0.001  # strictly > 0.0
 
-    delivery_ratio    = delivered / total
-    early_bonus       = _early_delivery_bonus(episode_stats)
+    delivery_ratio = delivered / total
+    early_bonus = _early_delivery_bonus(episode_stats)
     utilisation_bonus = _driver_utilisation_bonus(episode_stats)
-    priority_bonus    = _priority_adherence_bonus(episode_stats)
-    efficiency_bonus  = _step_efficiency_bonus(episode_stats, config.max_steps)
+    priority_bonus = _priority_adherence_bonus(episode_stats)
+    efficiency_bonus = _step_efficiency_bonus(episode_stats, config.max_steps)
 
     # ── EASY ──────────────────────────────────────────────────────────────────
     if task_id == "task_easy":
         score = (
             0.80 * delivery_ratio
-          + 0.20 * on_time_rate
-          + early_bonus * 0.5
-          + efficiency_bonus
-          - cap_violations * 0.10
+            + 0.20 * on_time_rate
+            + early_bonus * 0.5
+            + efficiency_bonus
+            - cap_violations * 0.10
         )
-        return round(max(0.0, min(1.0, score)), 4)
+        return _clamp(score)
 
     # ── MEDIUM ────────────────────────────────────────────────────────────────
     if task_id == "task_medium":
         score = (
             0.45 * delivery_ratio
-          + 0.35 * on_time_rate
-          + early_bonus
-          + utilisation_bonus
-          + priority_bonus
-          + efficiency_bonus
-          - cap_violations * 0.05
-          - sla_breaches   * 0.05
+            + 0.35 * on_time_rate
+            + early_bonus
+            + utilisation_bonus
+            + priority_bonus
+            + efficiency_bonus
+            - cap_violations * 0.05
+            - sla_breaches * 0.05
         )
-        return round(max(0.0, min(1.0, score)), 4)
+        return _clamp(score)
 
     # ── HARD ──────────────────────────────────────────────────────────────────
     if task_id == "task_hard":
         cancelled_penalty = episode_stats.get("assigned_to_cancelled", 0) * 0.02
         score = (
             0.35 * delivery_ratio
-          + 0.30 * on_time_rate
-          + early_bonus
-          + utilisation_bonus
-          + priority_bonus
-          + efficiency_bonus
-          - cap_violations  * 0.03
-          - sla_breaches    * 0.04
-          - cancelled_penalty
+            + 0.30 * on_time_rate
+            + early_bonus
+            + utilisation_bonus
+            + priority_bonus
+            + efficiency_bonus
+            - cap_violations * 0.03
+            - sla_breaches * 0.04
+            - cancelled_penalty
         )
-        return round(max(0.0, min(1.0, score)), 4)
+        return _clamp(score)
 
-    return 0.0
+    return 0.001  # fallback — strictly > 0.0
