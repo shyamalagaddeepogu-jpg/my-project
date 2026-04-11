@@ -16,7 +16,7 @@ except ImportError:
 # ── Environment variables ──────────────────────────────────────────────────────
 API_BASE_URL = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1")
 MODEL_NAME   = os.environ.get("MODEL_NAME",   "Qwen/Qwen2.5-72B-Instruct")
-HF_TOKEN     = os.environ.get("HF_TOKEN",     "")
+HF_TOKEN     = os.environ.get("HF_TOKEN") or "dummy-key"
 ENV_URL      = os.environ.get("ENV_URL",      "http://host.docker.internal:7860")
 BENCHMARK    = "delivery_dispatcher"
 
@@ -107,7 +107,7 @@ class LLMAgent:
     def __init__(self):
         self.api_base_url = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1")
         self.model_name   = os.environ.get("MODEL_NAME",   "Qwen/Qwen2.5-72B-Instruct")
-        self.hf_token     = os.environ.get("HF_TOKEN",     "")
+        self.hf_token     = os.environ.get("HF_TOKEN") or "dummy-key"
         self.client       = OpenAI(
             api_key=self.hf_token,
             base_url=self.api_base_url,
