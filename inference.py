@@ -16,16 +16,11 @@ except ImportError:
 # ── Environment variables ──────────────────────────────────────────────────────
 API_BASE_URL = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1")
 MODEL_NAME   = os.environ.get("MODEL_NAME",   "Qwen/Qwen2.5-72B-Instruct")
-HF_TOKEN     = os.environ.get("HF_TOKEN") or "dummy-key"
+HF_TOKEN     = os.environ.get("HF_TOKEN",     "dummy-key")
 ENV_URL      = os.environ.get("ENV_URL",      "http://host.docker.internal:7860")
 BENCHMARK    = "delivery_dispatcher"
 
 TASKS = ["task_easy", "task_medium", "task_hard"]
-
-SYSTEM = (
-    "You are a logistics dispatcher. "
-    "Reply with ONLY a single valid JSON object — no explanation, no markdown."
-)
 
 
 # ── Logging ────────────────────────────────────────────────────────────────────
@@ -59,32 +54,6 @@ def env_get(path):
     return r.json()
 
 
-# ── Prompt ─────────────────────────────────────────────────────────────────────
-def build_prompt(obs):
-    pending = obs.get("pending_orders", [])
-    drivers = obs.get("available_drivers", [])
-
-    orders_txt = "\n".join(
-        f"  {o['order_id']}: priority={o['priority']} weight={o['weight']}kg "
-        f"window={o['time_window']}min"
-        for o in sorted(pending, key=lambda x: (x["priority"] != "high", x["time_window"]))
-    ) or "  None"
-
-    drivers_txt = "\n".join(
-        f"  {d['driver_id']}: free="
-        f"{round(d.get('effective_capacity', d['capacity']) - d.get('current_load', 0), 1)}kg"
-        for d in drivers
-    ) or "  None"
-
-    return (
-        f"PENDING ORDERS:\n{orders_txt}\n\n"
-        f"AVAILABLE DRIVERS:\n{drivers_txt}\n\n"
-        "Choose ONE action. Reply with exactly one of:\n"
-        '{"action_type":"assign","driver_id":"DRV-01","order_id":"ORD-001"}\n'
-        '{"action_type":"delay","order_id":"ORD-001"}'
-    )
-
-
 # ── Heuristic Agent ────────────────────────────────────────────────────────────
 class HeuristicAgent:
     def get_action(self, obs):
@@ -107,23 +76,26 @@ class LLMAgent:
     def __init__(self):
         self.api_base_url = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1")
         self.model_name   = os.environ.get("MODEL_NAME",   "Qwen/Qwen2.5-72B-Instruct")
-        self.hf_token     = os.environ.get("HF_TOKEN") or "dummy-key"
-        self.client       = OpenAI(
-            api_key=self.hf_token,
-            base_url=self.api_base_url,
-        )
-        self.heuristic = HeuristicAgent()
+        self.hf_token     = os.environ.get("HF_TOKEN",     "dummy-key")
+        self.heuristic    = HeuristicAgent()
+        self.client       = None
+        try:
+            self.client = OpenAI(
+                api_key=self.hf_token,
+                base_url=self.api_base_url,
+            )
+        except Exception as e:
+            print(f"[ERROR] OpenAI client init failed: {e}", flush=True)
 
     def get_action(self, obs):
-        prompt = build_prompt(obs)
+        if self.client is None:
+            return self.heuristic.get_action(obs)
+        prompt = self._build_prompt(obs)
         for attempt in range(1, 3):
             try:
                 resp = self.client.chat.completions.create(
                     model=self.model_name,
-                    messages=[
-                        {"role": "system", "content": SYSTEM},
-                        {"role": "user",   "content": prompt},
-                    ],
+                    messages=[{"role": "user", "content": prompt}],
                     max_tokens=100,
                     temperature=0.0,
                 )
@@ -136,6 +108,24 @@ class LLMAgent:
             except Exception as e:
                 print(f"[ERROR] LLM attempt {attempt} failed: {e}", flush=True)
         return self.heuristic.get_action(obs)
+
+    def _build_prompt(self, obs):
+        pending = obs.get("pending_orders", [])
+        drivers = obs.get("available_drivers", [])
+        orders_txt = "\n".join(
+            f"  {o['order_id']}: priority={o['priority']} weight={o['weight']}kg window={o['time_window']}min"
+            for o in sorted(pending, key=lambda x: (x["priority"] != "high", x["time_window"]))
+        ) or "  None"
+        drivers_txt = "\n".join(
+            f"  {d['driver_id']}: free={round(d.get('effective_capacity', d['capacity']) - d.get('current_load', 0), 1)}kg"
+            for d in drivers
+        ) or "  None"
+        return (
+            f"PENDING ORDERS:\n{orders_txt}\n\nAVAILABLE DRIVERS:\n{drivers_txt}\n\n"
+            "Reply with ONE JSON:\n"
+            '{"action_type":"assign","driver_id":"DRV-01","order_id":"ORD-001"}\n'
+            'or {"action_type":"delay","order_id":"ORD-001"}'
+        )
 
 
 # ── Task runner ────────────────────────────────────────────────────────────────
@@ -154,10 +144,8 @@ def run_task(task_id, agent):
     while not done:
         if not obs.get("pending_orders"):
             break
-
         action    = agent.get_action(obs)
         error_msg = None
-
         try:
             result = env_post(f"/step/{task_id}", action)
             reward = float(result["reward"]["value"])
@@ -184,8 +172,6 @@ def run_task(task_id, agent):
 
 # ── Entry point ────────────────────────────────────────────────────────────────
 def main():
-    # Exact pattern from passing submission:
-    # use LLM only if both API_BASE_URL and HF_TOKEN are set
     use_llm = (
         os.environ.get("API_BASE_URL")
         and os.environ.get("HF_TOKEN")
@@ -193,10 +179,10 @@ def main():
     )
 
     if use_llm:
-        print(f"[INFO] LLM mode: model={MODEL_NAME} base_url={API_BASE_URL}", flush=True)
+        print(f"[INFO] LLM mode: model={MODEL_NAME}", flush=True)
         agent = LLMAgent()
     else:
-        print("[INFO] Heuristic mode (API_BASE_URL or HF_TOKEN not set)", flush=True)
+        print("[INFO] Heuristic mode", flush=True)
         agent = HeuristicAgent()
 
     scores = {}
