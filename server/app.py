@@ -1,12 +1,10 @@
 """
 server/app.py — Delivery Dispatcher OpenEnv
 Required by openenv validate for multi-mode deployment.
-Wraps the existing Flask app with the server entry point.
 """
 import os
 import sys
 
-# Make the repo root importable so env.py, models.py, tasks.py, data.py all work
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
@@ -17,12 +15,12 @@ app = Flask(__name__, static_folder=ROOT)
 CORS(app)
 
 _envs = {}
+DEFAULT_TASK = "task_easy"
 
 
 def _get_env(task_id):
     from env import DeliveryDispatcherEnv
     from tasks import TASKS
-
     if task_id not in TASKS:
         return None, f"Unknown task_id: {task_id}. Valid: {list(TASKS.keys())}"
     if task_id not in _envs:
@@ -45,6 +43,31 @@ def dashboard():
     return send_from_directory(ROOT, "dashboard.html")
 
 
+# ── Bare /reset and /step for the openenv validator ping (defaults to task_easy) ──
+
+@app.route("/reset", methods=["POST"])
+def reset_default():
+    env, err = _get_env(DEFAULT_TASK)
+    if err:
+        return jsonify({"error": err}), 404
+    obs = env.reset()
+    return jsonify(obs.dict())
+
+
+@app.route("/step", methods=["POST"])
+def step_default():
+    env, err = _get_env(DEFAULT_TASK)
+    if err:
+        return jsonify({"error": err}), 404
+    from models import Action
+    data = request.get_json() or {}
+    action = Action.from_dict(data)
+    result = env.step(action)
+    return jsonify(result.dict())
+
+
+# ── Task-specific routes ──
+
 @app.route("/reset/<task_id>", methods=["POST"])
 def reset(task_id):
     env, err = _get_env(task_id)
@@ -60,7 +83,7 @@ def step(task_id):
     if err:
         return jsonify({"error": err}), 404
     from models import Action
-    data = request.get_json()
+    data = request.get_json() or {}
     action = Action.from_dict(data)
     result = env.step(action)
     return jsonify(result.dict())
