@@ -1,15 +1,19 @@
 """
 server/app.py — Delivery Dispatcher OpenEnv
-Required by openenv validate for multi-mode deployment.
 """
+
 import os
 import sys
 
+# Make sure root is in path so 'environment' package is found
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
+from environment.env import DeliveryDispatcherEnv
+from environment.models import Action
+from environment.tasks import TASKS
 
 app = Flask(__name__, static_folder=ROOT)
 CORS(app)
@@ -19,8 +23,6 @@ DEFAULT_TASK = "task_easy"
 
 
 def _get_env(task_id):
-    from env import DeliveryDispatcherEnv
-    from tasks import TASKS
     if task_id not in TASKS:
         return None, f"Unknown task_id: {task_id}. Valid: {list(TASKS.keys())}"
     if task_id not in _envs:
@@ -30,7 +32,7 @@ def _get_env(task_id):
 
 @app.route("/health")
 def health():
-    return jsonify({"status": "healthy", "service": "delivery-dispatcher"})
+    return jsonify({"status": "healthy"})
 
 
 @app.route("/")
@@ -43,8 +45,7 @@ def dashboard():
     return send_from_directory(ROOT, "dashboard.html")
 
 
-# ── Bare /reset and /step for the openenv validator ping (defaults to task_easy) ──
-
+# Bare routes for validator
 @app.route("/reset", methods=["POST"])
 def reset_default():
     env, err = _get_env(DEFAULT_TASK)
@@ -59,15 +60,21 @@ def step_default():
     env, err = _get_env(DEFAULT_TASK)
     if err:
         return jsonify({"error": err}), 404
-    from models import Action
     data = request.get_json() or {}
     action = Action.from_dict(data)
     result = env.step(action)
     return jsonify(result.dict())
 
 
-# ── Task-specific routes ──
+@app.route("/score", methods=["GET"])
+def score_default():
+    env, err = _get_env(DEFAULT_TASK)
+    if err:
+        return jsonify({"error": err}), 404
+    return jsonify({"task_id": DEFAULT_TASK, "score": env.final_score(), "stats": env._episode_stats()})
 
+
+# Task-specific routes
 @app.route("/reset/<task_id>", methods=["POST"])
 def reset(task_id):
     env, err = _get_env(task_id)
@@ -82,7 +89,6 @@ def step(task_id):
     env, err = _get_env(task_id)
     if err:
         return jsonify({"error": err}), 404
-    from models import Action
     data = request.get_json() or {}
     action = Action.from_dict(data)
     result = env.step(action)
@@ -99,7 +105,6 @@ def state(task_id):
 
 @app.route("/tasks", methods=["GET"])
 def list_tasks():
-    from tasks import TASKS
     return jsonify({
         tid: {
             "description": t.description,
@@ -117,17 +122,12 @@ def score(task_id):
     env, err = _get_env(task_id)
     if err:
         return jsonify({"error": err}), 404
-    return jsonify({
-        "task_id": task_id,
-        "score": env.final_score(),
-        "stats": env._episode_stats(),
-    })
+    return jsonify({"task_id": task_id, "score": env.final_score(), "stats": env._episode_stats()})
 
 
 def main():
     port = int(os.environ.get("PORT", 7860))
-    host = os.environ.get("HOST", "0.0.0.0")
-    app.run(host=host, port=port, debug=False)
+    app.run(host="0.0.0.0", port=port, debug=False)
 
 
 if __name__ == "__main__":
