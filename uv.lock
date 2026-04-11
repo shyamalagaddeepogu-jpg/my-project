@@ -1,0 +1,62 @@
+version = 1
+requires-python = ">=3.10"
+
+[[package]]
+name = "delivery-dispatcher"
+version = "1.0.0"
+source = { editable = "." }
+dependencies = [
+  { name = "openenv-core" },
+  { name = "flask" },
+  { name = "flask-cors" },
+  { name = "openai" },
+  { name = "requests" },
+  { name = "python-dotenv" },
+  { name = "gunicorn" },
+]
+
+[package.metadata]
+requires-dist = [
+  { name = "openenv-core", specifier = ">=0.2.0" },
+  { name = "flask", specifier = "==3.0.3" },
+  { name = "flask-cors", specifier = "==4.0.1" },
+  { name = "openai", specifier = ">=1.30.1" },
+  { name = "requests", specifier = ">=2.31.0" },
+  { name = "python-dotenv", specifier = ">=1.0.1" },
+  { name = "gunicorn", specifier = ">=21.2.0" },
+]
+
+[[package]]
+name = "openenv-core"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+
+[[package]]
+name = "flask"
+version = "3.0.3"
+source = { registry = "https://pypi.org/simple" }
+
+[[package]]
+name = "flask-cors"
+version = "4.0.1"
+source = { registry = "https://pypi.org/simple" }
+
+[[package]]
+name = "openai"
+version = "1.30.1"
+source = { registry = "https://pypi.org/simple" }
+
+[[package]]
+name = "requests"
+version = "2.31.0"
+source = { registry = "https://pypi.org/simple" }
+
+[[package]]
+name = "python-dotenv"
+version = "1.0.1"
+source = { registry = "https://pypi.org/simple" }
+
+[[package]]
+name = "gunicorn"
+version = "21.2.0"
+source = { registry = "https://pypi.org/simple" }
