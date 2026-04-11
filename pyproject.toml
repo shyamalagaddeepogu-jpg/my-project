@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "delivery-dispatcher"
+version = "1.0.0"
+description = "Delivery Dispatcher - OpenEnv reinforcement learning environment"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "flask==3.0.3",
+    "flask-cors==4.0.1",
+    "openai==1.30.1",
+    "requests==2.31.0",
+    "python-dotenv==1.0.1",
+    "gunicorn==21.2.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "black", "ruff"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["*"]
+
+[project.scripts]
+delivery-dispatcher = "app:app"
