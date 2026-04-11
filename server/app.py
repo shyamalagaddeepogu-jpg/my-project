@@ -5,7 +5,6 @@ server/app.py — Delivery Dispatcher OpenEnv
 import os
 import sys
 
-# Make sure root is in path so 'environment' package is found
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
@@ -45,7 +44,6 @@ def dashboard():
     return send_from_directory(ROOT, "dashboard.html")
 
 
-# Bare routes for validator
 @app.route("/reset", methods=["POST"])
 def reset_default():
     env, err = _get_env(DEFAULT_TASK)
@@ -74,7 +72,6 @@ def score_default():
     return jsonify({"task_id": DEFAULT_TASK, "score": env.final_score(), "stats": env._episode_stats()})
 
 
-# Task-specific routes
 @app.route("/reset/<task_id>", methods=["POST"])
 def reset(task_id):
     env, err = _get_env(task_id)
